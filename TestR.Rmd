@@ -1,0 +1,137 @@
+---
+title: "Albert Einstein - DS Test in R"
+author: "Caio Serrano"
+date: "9/29/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(car)
+library(gplots)
+library(caTools)
+library(randomForest)
+library(kernlab)
+library(gbm)
+library(ROCR)
+library(e1071)
+setwd('A:\\Workset')
+```
+
+## Visualizing the problem - Data Analysis - Part 1: Structure
+
+First of all, we need understand what kind of problem and data we going to handle.
+Here are the data structure:
+
+```{r Part 1: Structure}
+df_points <- read.delim("df_points.txt", row.names=1, quote="", stringsAsFactors=FALSE)
+summary(df_points)
+str(df_points)
+```
+
+## Visualizing the problem - Data Analysis - Part 2: Check normalization
+
+Before create models to fit our data, we need to know if our data is normalized, in another others, if our data is in a good format for model:
+
+```{r Part 2: Check normalization}
+hist(df_points$x)
+hist(df_points$z)
+hist(df_points$y)
+```
+
+As we can see, our data isn't normalize as we want. We need to normalize our data.
+
+```{r Part 2.1: Check normalization}
+df_points$x <- scale(df_points$x)
+df_points$z <- scale(df_points$z)
+df_points$y <- scale(df_points$y)
+df_points$label <- as.factor(df_points$label)
+```
+
+Now we are good to go with our data.
+As we can see, we are good to go with our data.
+
+## Split Data - Part 3: split data in test and train datasets
+
+Now, before we start the model fit, we need to split our main dataset in 2 components, as we handling with a classification problem:
+
+  - Train Dataset: Our model will "learning" using this dataset. On this part, it will "understand" all correlations between the features (Colunms) and the observations (rows) based on the labels (Observation Class) (80% of Original Dataset)
+  
+  - Test Dataset: Our model will predict what it have learned and it will predict the results (20 % of Original Dataset)
+
+```{r Part 3.1: split data}
+set.seed(10)
+sample = sample.split(df_points, SplitRatio = .70)
+train = subset(df_points, sample == TRUE)
+test  = subset(df_points, sample == FALSE)
+```
+
+As we can see, the Dataset structure of our train and test still the same:
+
+```{r Part 3.2: Check Data Split}
+str(train)
+str(test)
+```
+
+Finally, we need to change the label data type from `numeric` to `factor`. It is necessary to demonstrate for our model that kind of data is the classification:
+
+```{r Part 3.2: Data Type}
+train$label <- as.factor(train$label)
+test$label <- as.factor(test$label)
+```
+
+## Time to fit - Part 4 - Logistic Regresion Model
+
+Now is the time we attempt to model our classification problem. Our first try will be the Logistic Regression Algorithm. 
+Here, we can see when the model learn (`glm.fit`) about our data
+```{r Part 4.1: LogReg}
+glm.fit <- glm(label ~ x + y + z, train ,family=binomial(link = "logit"))
+```
+And now, we can see when the model try to predict the classification using what it learned.
+Obs: `ifelse` part is necessary because the Logistic Regression Agorithm predict using the probability of be 1 or 0 in our case. 
+On this case, for don't transform all predicted classification in 0, we need to use the threshold `0.1`  
+```{r Part 4.2: LogReg}
+glm.fit <- glm(label ~ x + y + z, train ,family=binomial(link = "logit"))
+glm.pred <- predict(glm.fit, newdata = test)
+glm.results <- ifelse(glm.pred >= 0.1, 1, 0)
+glm.results <- as.factor(glm.results) 
+```
+Now let's check how good our model really is to predict?
+```{r part 4.3: LogReg}
+confusionMatrix(glm.results,reference =  test$label)
+ROC_GLM  <- prediction(as.numeric(glm.results),test$label)
+GLM_PERF <- performance(ROC_GLM,"tpr","fpr")
+plot(GLM_PERF,colorize = TRUE)
+```
+
+
+
+This is wasn't good!! Our model showed has a low accuracy of `48,2% (0.482)`.
+
+
+## Time to fit - Part 5 - Support Vector Machine (SVM)
+
+Our another try will be with Support Vector Machine Algorithm. It is algorithm that try to classify the data using hyperplanes.
+```{r part 5.1}
+svm.fit <- ksvm(label ~ x + y + z, train, type = 'C-svc', kernel = 'rbfdot')
+svm.pred <- predict(svm.fit, test)
+```
+
+Now let's check how good our model really is to predict?
+
+```{r part 5.2}
+confusionMatrix(as.factor(svm.pred),as.factor(test$label))
+ROC_SVM  <- prediction(as.numeric(svm.pred), as.numeric(test$label))
+SVM_PERF <- performance(ROC_SVM,"tpr","fpr") 
+plot(SVM_PERF,colorize = TRUE)
+```
+
+
+Good!! Our second model demostrated to have an accuracy of `75,8% (0.758)`. 
+On ROC graph, we can see that our SVM model has more true positive (truth preditive chance) than GLM model that is 50%.
+
+## Conclusion - Part 6 
+
+With the both tests made with the SMV and GLM model, we can conclude that SVM showed a better accuracy and positive rate to predict the truth.
